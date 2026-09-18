@@ -1,0 +1,25 @@
+{
+  "name": "icon-matcher",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Demo: match a UI section title to a Hugeicons icon using TypeSafe.ai's Choice primitive (no lexical/keyword search).",
+  "scripts": {
+    "match": "node --env-file=.env --import=tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@hugeicons/core-free-icons": "^4.3.3",
+    "@hugeicons/react": "^1.1.10",
+    "@typesafe-ai/sdk": "^0.6.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
