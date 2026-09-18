@@ -28,15 +28,17 @@ set (Hugeicons free tier + Lucide) is ~8,800 concepts. So the combined list is s
 questions in a single call sounds free — TypeSafe's docs say extra questions in one call
 don't add latency — but in practice a request that large gets rejected with a "max tokens
 exceeded" error well before the documented ~32k input-token budget is reached (observed
-failure: 718 input tokens). The real constraint seems to be output size — a probability per
-option, across every option in the request — which scales with option *count*, not
-description length.
+failure: 718 input tokens, and the same error even for a single 240-option question on its
+own). The real constraint seems to be output size — a probability per option, across every
+option in the request — which scales with option *count*, not description length.
 
-Since there's no documented threshold for this, `matchIcon.ts` discovers it at runtime:
-shards are grouped into "waves" (one API call each, run in parallel), and a wave that hits
-this error gets split in half and retried, recursively, until it fits. The safe size is
-cached after the first discovery, so later matches skip straight to it instead of
-rediscovering it every time. Every icon from every family still gets a real model judgment
+Since there's no documented threshold for this, the first match after startup runs a quick
+calibration probe: one sequential Choice call, halving its option count on each rejection
+until it fits. That discovered size is cached and reused for every match after that — so if
+the real ceiling turns out to be small, expect many small parallel calls per match rather
+than one big one, but only the first match pays the discovery cost. (`runBatch` in
+`matchIcon.ts` also keeps a bisection fallback for the rare case a full-scale request still
+exceeds the calibrated size.) Every icon from every family still gets a real model judgment
 either way — nothing is pre-filtered by string matching, and shards freely mix families.
 
 Each shard returns a confidence score (how peaked vs. flat its probability distribution is).
