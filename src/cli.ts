@@ -9,7 +9,7 @@ async function main() {
   }
 
   console.log(`Matching icon for: "${title}"...`);
-  const result = await matchIcon(title);
+  const result = await matchIcon(title, (msg) => console.log(`   ${msg}`));
 
   if (result.band === "none") {
     console.log(`No confident match — falling back to default icon: ${result.icon}`);

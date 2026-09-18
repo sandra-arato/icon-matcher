@@ -23,11 +23,21 @@ judgment at every step — across every icon family being searched, not just one
 ## How it works
 
 TypeSafe's `Choice` primitive caps out at 255 options per question, but the combined icon
-set (Hugeicons free tier + Lucide) is ~8,400 concepts. So the combined list is split into
-~36 shards of 240 (plus a `none_of_these` option each), and **all shards are sent as
-parallel `Choice` questions in a single API call** — extra questions in one call don't add
-latency, so this is one round trip, and every icon from every family gets a real model
-judgment (nothing is pre-filtered by string matching, and shards freely mix families).
+set (Hugeicons free tier + Lucide) is ~8,800 concepts. So the combined list is split into
+~37 shards of 240 (plus a `none_of_these` option each). Sending all of them as parallel
+questions in a single call sounds free — TypeSafe's docs say extra questions in one call
+don't add latency — but in practice a request that large gets rejected with a "max tokens
+exceeded" error well before the documented ~32k input-token budget is reached (observed
+failure: 718 input tokens). The real constraint seems to be output size — a probability per
+option, across every option in the request — which scales with option *count*, not
+description length.
+
+Since there's no documented threshold for this, `matchIcon.ts` discovers it at runtime:
+shards are grouped into "waves" (one API call each, run in parallel), and a wave that hits
+this error gets split in half and retried, recursively, until it fits. The safe size is
+cached after the first discovery, so later matches skip straight to it instead of
+rediscovering it every time. Every icon from every family still gets a real model judgment
+either way — nothing is pre-filtered by string matching, and shards freely mix families.
 
 Each shard returns a confidence score (how peaked vs. flat its probability distribution is).
 The highest-confidence shard's pick wins — regardless of which family it came from — and if
