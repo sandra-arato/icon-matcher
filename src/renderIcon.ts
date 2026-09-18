@@ -1,16 +1,10 @@
-import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { HugeiconsIcon } from "@hugeicons/react";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { getIconGlyph } from "./icons";
+import { renderQualified } from "./providers/index";
 
-export function renderIconToFile(iconName: string, title: string): string {
-  const glyph = getIconGlyph(iconName);
-  if (!glyph) throw new Error(`Unknown icon export: ${iconName}`);
-
-  const svg = renderToStaticMarkup(
-    createElement(HugeiconsIcon, { icon: glyph, size: 64, color: "#111111" }),
-  );
+export function renderIconToFile(qualifiedName: string, title: string): string {
+  const element = renderQualified(qualifiedName, { size: 64, color: "#111111" });
+  const svg = renderToStaticMarkup(element);
 
   const slug = title
     .toLowerCase()

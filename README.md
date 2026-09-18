@@ -1,13 +1,14 @@
 # icon-matcher
 
-Type a UI section title, get back the [Hugeicons](https://hugeicons.com) icon that best
-represents it — matched by [TypeSafe.ai](https://docs.typesafe.ai)'s `Choice` primitive,
-not by keyword/lexical search.
+Type a UI section title, get back the icon that best represents it — searched across
+multiple icon families ([Hugeicons](https://hugeicons.com), [Lucide](https://lucide.dev))
+at once, matched by [TypeSafe.ai](https://docs.typesafe.ai)'s `Choice` primitive, not by
+keyword/lexical search.
 
 ```
 $ npm run match -- "audience"
 Matching icon for: "audience"...
--> <a users/people icon>  (confidence: 0.78, high)
+-> <a users/people icon, from whichever family fit best>  (confidence: 0.78, high)
 Saved SVG to output/audience.svg
 ```
 (illustrative — the actual icon name/confidence depends on the model's response)
@@ -17,22 +18,44 @@ Saved SVG to output/audience.svg
 The mapping is often a conceptual leap with zero shared words: "channels" → a mobile-phone
 icon, "brief" → a document icon, "audience" → a multiple-users icon. No fuzzy or keyword
 search finds those pairs, because the words don't overlap at all. This needs real semantic
-judgment at every step.
+judgment at every step — across every icon family being searched, not just one.
 
 ## How it works
 
-TypeSafe's `Choice` primitive caps out at 255 options per question, but the icon pack has
-~6,700 concepts. So the ~6,700 icons are split into ~28 shards of 240 (plus a `none_of_these`
-option each), and **all shards are sent as parallel `Choice` questions in a single API call**
-— extra questions in one call don't add latency, so this is one round trip, and every icon
-gets a real model judgment (nothing is pre-filtered by string matching).
+TypeSafe's `Choice` primitive caps out at 255 options per question, but the combined icon
+set (Hugeicons free tier + Lucide) is ~8,400 concepts. So the combined list is split into
+~36 shards of 240 (plus a `none_of_these` option each), and **all shards are sent as
+parallel `Choice` questions in a single API call** — extra questions in one call don't add
+latency, so this is one round trip, and every icon from every family gets a real model
+judgment (nothing is pre-filtered by string matching, and shards freely mix families).
 
 Each shard returns a confidence score (how peaked vs. flat its probability distribution is).
-The highest-confidence shard's pick wins; if the top two are close, one small tie-break
-`Choice` call directly compares them. See `src/matchIcon.ts`.
+The highest-confidence shard's pick wins — regardless of which family it came from — and if
+the top two are close, one small tie-break `Choice` call directly compares them, even across
+families. See `src/matchIcon.ts`.
 
-The icon list itself needs no scraping or offline build step — it's read straight from the
-installed `@hugeicons/core-free-icons` package's exports at startup (`src/icons.ts`).
+None of this needs scraping or an offline build step — each family's icon list is read
+straight from its npm package's exports at startup.
+
+### Adding another icon family
+
+Icon families are pluggable. Each one implements the small `IconProvider` interface in
+`src/providers/types.ts`:
+
+```ts
+interface IconProvider {
+  id: string; // short unique key, e.g. "lucide" — prefixes every icon name so families never collide
+  listIcons(): { name: string; description: string }[];
+  renderElement(name: string, opts: { size: number; color: string }): ReactElement;
+}
+```
+
+`src/providers/hugeicons.ts` and `src/providers/lucide.ts` are the two reference
+implementations — both just read `Object.keys(iconPackage)` at startup, no metadata files
+involved. To add a family (Heroicons, Tabler, your own icon set, ...), write a new file in
+`src/providers/` implementing that interface and add it to the `providers` array in
+`src/providers/index.ts`. Everything else — sharding, matching, rendering, the CLI — is
+already family-agnostic.
 
 ## Setup
 
@@ -51,21 +74,21 @@ npm run match -- "brief"
 npm run match -- "audience"
 ```
 
-Prints the matched icon name, its confidence, and (when confidence is only medium) the
-runner-up candidates. Also writes the rendered icon to `output/<slug>.svg`.
+Prints the matched icon (as `<family>:<name>`), its confidence, and (when confidence is
+only medium) the runner-up candidates. Also writes the rendered icon to `output/<slug>.svg`.
 
-## Using the licensed Pro icon set
+## Using the licensed Hugeicons Pro set
 
-This demo ships against the free tier (`@hugeicons/core-free-icons`, ~6,700 icons, one
-style) since that's public on npm. To use your company's licensed Pro packages (60,000
+This demo ships against Hugeicons' free tier (`@hugeicons/core-free-icons`, ~6,700 icons,
+one style) since that's public on npm. To use your company's licensed Pro packages (60,000
 icons, 10 styles):
 
 1. Install the Pro style package(s) from your Hugeicons registry, e.g. `@hugeicons/pro-stroke-rounded`.
-2. In `src/icons.ts`, change the `import * as HugeIcons from "@hugeicons/core-free-icons"`
-   line to import from your installed Pro package instead — everything downstream
-   (`matchIcon.ts`, `renderIcon.ts`, `cli.ts`) is unchanged, since they only depend on the
-   `{ name, description }` shape `getAllIcons()` returns.
+2. In `src/providers/hugeicons.ts`, change the `import * as HugeIcons from "@hugeicons/core-free-icons"`
+   line to import from your installed Pro package instead — nothing else needs to change,
+   since the rest of the app only depends on the `IconProvider` shape.
 
 ## License
 
-[MIT](LICENSE) — icons themselves remain under [Hugeicons' own license](https://hugeicons.com/license).
+[MIT](LICENSE) — icons themselves remain under each family's own license
+([Hugeicons](https://hugeicons.com/license), [Lucide](https://lucide.dev/license) — ISC).

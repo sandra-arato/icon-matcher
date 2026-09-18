@@ -1,16 +1,16 @@
 import { TypeSafeClient, choice } from "@typesafe-ai/sdk";
-import { getAllIcons } from "./icons";
+import { getAllCandidates } from "./providers/index";
 
 const CHUNK_SIZE = 240; // + 1 "none_of_these" option per chunk, stays under the 255-option Choice cap
 const NONE_LABEL = "none_of_these";
 const TIE_BREAK_MARGIN = 0.15; // if the top two shard confidences are this close, run a direct tie-break
 const HIGH_CONFIDENCE = 0.5;
-const DEFAULT_FALLBACK_ICON = "Tag01Icon";
+const DEFAULT_FALLBACK_ICON = "hugeicons:HelpCircleIcon";
 
 const client = new TypeSafeClient();
 
 export interface Candidate {
-  icon: string;
+  icon: string; // qualified name, e.g. "lucide:House"
   description: string;
   confidence: number;
 }
@@ -29,19 +29,20 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 /**
- * Every icon in the library gets a real Choice judgment from the model — the list is only
- * split into ≤255-option shards because that's the Choice primitive's hard cap, not because
- * anything was pre-filtered by keyword/lexical matching.
+ * Every icon across every registered provider gets a real Choice judgment from the model —
+ * the combined list is only split into ≤255-option shards because that's the Choice
+ * primitive's hard cap, not because anything was pre-filtered by keyword/lexical matching.
+ * A shard can freely mix icons from different families; the model just sees more options.
  */
 async function shardedFanOut(title: string): Promise<Candidate[]> {
-  const icons = getAllIcons();
+  const icons = getAllCandidates();
   const shards = chunk(icons, CHUNK_SIZE);
 
   const questions = Object.fromEntries(
     shards.map((shard, i) => [
       `shard_${i}`,
       choice(`Which icon best represents a UI section titled '${title}'?`, {
-        ...Object.fromEntries(shard.map((icon) => [icon.name, icon.description])),
+        ...Object.fromEntries(shard.map((icon) => [icon.qualifiedName, icon.description])),
         [NONE_LABEL]: "No icon in this list fits well",
       }),
     ]),
@@ -49,7 +50,7 @@ async function shardedFanOut(title: string): Promise<Candidate[]> {
 
   const response = await client.systemOne({ state: { title }, questions });
 
-  const byName = new Map(icons.map((i) => [i.name, i.description]));
+  const byName = new Map(icons.map((i) => [i.qualifiedName, i.description]));
   const candidates: Candidate[] = [];
   for (const answer of Object.values(response.answers)) {
     if (answer.choice === NONE_LABEL) continue;
@@ -63,7 +64,7 @@ async function shardedFanOut(title: string): Promise<Candidate[]> {
   return candidates;
 }
 
-/** Cheap head-to-head second opinion when the top two shard winners are close. */
+/** Cheap head-to-head second opinion when the top two shard winners are close — can compare across families. */
 async function tieBreak(title: string, a: Candidate, b: Candidate): Promise<Candidate> {
   const response = await client.systemOne({
     state: { title },
